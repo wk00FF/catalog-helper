@@ -1,0 +1,15 @@
+{
+	"name": "wk00ff/catalog-helper",
+	"autoload": {
+		"psr-4": {
+			"wk00FF\\CatalogHelper\\": "src/"
+		}
+	},
+	"authors": [
+		{
+			"name": "william smith",
+			"email": "wk00FF@gmail.com"
+		}
+	],
+	"require": {}
+}

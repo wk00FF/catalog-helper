@@ -1,10 +1,11 @@
 {
 	"name": "wk00ff/catalog-helper",
-	"version": "1.0",
+	"version": "1.001",
 	"autoload": {
-		"psr-4": {
-			"wk00FF\\CatalogHelper\\": "src/"
-		}
+		"classmap": [
+			"src/CatalogHelper.php"
+		],
+		"files": []
 	},
 	"authors": [
 		{

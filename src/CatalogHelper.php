@@ -67,7 +67,7 @@ class CatalogHelper{
 		foreach($section['SECTIONS'] as $sectID=>$sect){
 			$ret=$this->getParentSectionsOfElement($elementID, $sectID, $parents);
 			if(is_array($ret)){
-				//				$ret[]=$parentSectionID;
+//				$ret[]=$parentSectionID;
 				array_unshift($ret, $parentSectionID);
 				return $ret;
 			}
@@ -309,5 +309,106 @@ class CatalogHelper{
 			}
 		}
 		return $arPropertyes;
+	}
+	function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
+		CModule::IncludeModule("iblock");
+		CModule::IncludeModule("catalog");
+		CModule::IncludeModule("sale");
+		global $USER;
+		if(CCatalogSku::IsExistOffers($item_id)){																																	// Проверяем, имеет ли товар торговые предложения?
+			$res=CIBlockElement::GetByID($item_id);																																	// Пытаемся найти цену среди торговых предложений
+			if($ar_res=$res->GetNext()){
+				$productName=$ar_res["NAME"];
+				if(isset($ar_res['IBLOCK_ID']) && $ar_res['IBLOCK_ID']){
+					$offers=CIBlockPriceTools::GetOffersArray([																														// Ищем все тогровые предложения
+						'IBLOCK_ID'         =>$ar_res['IBLOCK_ID'],
+						'HIDE_NOT_AVAILABLE'=>'Y',
+						'CHECK_PERMISSIONS' =>'Y',
+					], [$item_id], null, null, null, null, null, null, ['CURRENCY_ID'=>$sale_currency]);
+					foreach($offers as $offer){
+						$price=CCatalogProduct::GetOptimalPrice($offer['ID'], $cnt, $USER->GetUserGroupArray(), 'N');
+						if(isset($price['PRICE'])){
+							$final_price=$price['PRICE']['PRICE'];
+							$currency_code=$price['PRICE']['CURRENCY'];
+							$arDiscounts=CCatalogDiscount::GetDiscountByProduct($item_id, $USER->GetUserGroupArray(), "N");															// Ищем скидки и высчитываем стоимость с учетом найденных
+							if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
+								$final_price=CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
+							}
+							break;
+						}
+					}
+				}
+			}
+		}else{
+			$price=CCatalogProduct::GetOptimalPrice($item_id, $cnt, [1, 2, 3, 4, 5,], 'N');																							// Простой товар, без торговых предложений (для количества равному $cnt)
+			if(!$price || !isset($price['PRICE'])){
+				return false;
+			}
+			if(isset($price['CURRENCY'])){																																			// Меняем код валюты, если нашли
+				$currency_code=$price['CURRENCY'];
+			}
+			if(isset($price['PRICE']['CURRENCY'])){
+				$currency_code=$price['PRICE']['CURRENCY'];
+			}
+			$final_price=$price['PRICE']['PRICE'];																																	// Получаем итоговую цену
+			$arDiscounts=CCatalogDiscount::GetDiscountByProduct($item_id, [1, 2, 3, 4, 5,], "N", 2);																				// Ищем скидки и пересчитываем цену товара с их учетом
+			if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
+				$final_price=CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
+			}
+			if($getName=="Y"){
+				$res=CIBlockElement::GetByID($item_id);
+				$ar_res=$res->GetNextElement();
+				$arFields=$ar_res->GetFields();
+				$arProps=$ar_res->GetProperties([], ['CODE'=>'CONF_HEADING']);
+				if($arProps['CONF_HEADING']['VALUE']){
+					$productName=is_array($arProps['CONF_HEADING']['VALUE'])?$arProps['CONF_HEADING']['VALUE'][0]:$arProps['CONF_HEADING']['VALUE'];
+				}else
+					$productName=$arFields["NAME"];
+			}
+		}
+		if($currency_code!=$sale_currency){																																			// Если необходимо, конвертируем в нужную валюту
+			$final_price=CCurrencyRates::ConvertCurrency($final_price, $currency_code, $sale_currency);
+		}
+		$arRes=[
+			'PRICE'      =>$price['PRICE']['PRICE'],
+			'FINAL_PRICE'=>$final_price,
+			'CURRENCY'   =>$sale_currency,
+			'DISCOUNT'   =>$arDiscounts,
+		];
+		if($productName!="") $arRes['NAME']=$productName;
+		return $arRes;
+	}
+	public static function getStockQuantity($productId){
+		$arStocks=[];
+		$arStocks['TOTAL']=0;
+		$productData=Bitrix\Catalog\ProductTable::getList([
+			'filter'=>['=ID'=>$productId],
+			'select'=>['ID', 'QUANTITY',],
+		])->fetch();
+
+		// Получаем остатки товара на складах
+		$storeProducts=Bitrix\Catalog\StoreProductTable::getList([
+			'filter'=>['=PRODUCT_ID'=>$productId],
+			'select'=>['STORE_ID', 'AMOUNT',],
+		]);
+		while($storeProduct=$storeProducts->fetch()){
+			$storeId=$storeProduct['STORE_ID'];
+			$quantity=$storeProduct['AMOUNT'];
+
+			// Получаем название склада
+			$storeData=Bitrix\Catalog\StoreTable::getList([
+				'filter'=>['=ID'=>$storeId],
+				'select'=>['ID', 'TITLE',],
+			])->fetch();
+			if($storeData){
+				$arStocks[$storeData['ID']]=[
+					'ID'=>$storeData['ID'],
+					'NAME'=>$storeData['TITLE'],
+					'QUANTITY'=>$quantity,
+				];
+				$arStocks['TOTAL']+=$quantity;
+			}
+		}
+		return $arStocks;
 	}
 }

@@ -41,16 +41,16 @@ class CatalogHelper{
 	}
 	// проверить наличие элемента в дереве, начиная с $parentID
 	// возвращает элемент, если элемент есть
-	public function checkElement($elementID, $parentSectionID=0){
+	public function getElementByID($elementID, $parentSectionID=0){
 		$section=&$this->getSection($parentSectionID);
-		if(count($section['ELEMENTS'])){
+		if(count((array)$section['ELEMENTS'])){
 			foreach($section['ELEMENTS'] as $id=>$element){
 				if($element['ID']==$elementID) return $element;
 			}
 		}
-		if(count($section['SECTIONS'])){
+		if(count((array)$section['SECTIONS'])){
 			foreach($section['SECTIONS'] as $sectID=>$sect){
-				$ret=$this->checkElement($elementID, $sectID);
+				$ret=$this->getElementByID($elementID, $sectID);
 				if($ret) return $ret;
 			}
 		}

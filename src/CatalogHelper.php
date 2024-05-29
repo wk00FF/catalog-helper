@@ -239,7 +239,7 @@ class CatalogHelper{
 	//$section_id - id секции
 	//$section_code - символьный код секции
 	//$arFilter - массив свойств для фильтрации (необязательный). Но для ускорения процесса поиска можно передать id инфоблока, в котором лежит элемент: array("IBLOCK_ID" => №).
-	function getSectionIDByCode_($section_code, $bRefreshCache=false, $section_id='', $arFilter=''){
+	public static function getSectionIDByCode_($section_code, $bRefreshCache=false, $section_id='', $arFilter=''){
 		if($bRefreshCache){
 			$obCache=new CPHPCache;
 			$iReturnId=false;

@@ -208,6 +208,58 @@ class CatalogHelper{
 		}
 		return count($res)?$res:false;
 	}
+	/**
+	 * Возвращает ID инфоблока по символьному коду NEW
+	 * @param      $sIBlockCode
+	 * @param bool $bRefreshCache
+	 * @return int
+	 */
+	public static function getIBlockIDByCode_($sIBlockCode, $bRefreshCache=false){
+		if($bRefreshCache){
+			$obCache=new CPHPCache;
+			$iReturnId=false;
+			$CACHE_ID='getIBlockIDByCode';
+			$iCacheTime=10800; //3 часа
+			if($obCache->InitCache($iCacheTime, $sIBlockCode, $CACHE_ID)){
+				$vars=$obCache->GetVars();
+				$iReturnId=$vars['result'];
+			}
+			elseif($obCache->StartDataCache($iCacheTime, $sIBlockCode, $CACHE_ID)){
+				$iReturnId=\Bitrix\Iblock\IblockTable::getList(['select'=>['ID'], 'filter'=>['CODE'=>$sIBlockCode]])->Fetch()["ID"];
+				$obCache->EndDataCache(['result'=>$iReturnId]);
+			}
+			return $iReturnId;
+		}
+		else{
+			return \Bitrix\Iblock\IblockTable::getList(['select'=>['ID'], 'filter'=>['CODE'=>$sIBlockCode]])->Fetch()["ID"];
+		}
+	}
+	//Возвращает ID секции по символьному коду NEW.
+	//Параметры:
+	//$section_id - id секции
+	//$section_code - символьный код секции
+	//$arFilter - массив свойств для фильтрации (необязательный). Но для ускорения процесса поиска можно передать id инфоблока, в котором лежит элемент: array("IBLOCK_ID" => №).
+	function getSectionIDByCode_($section_code, $bRefreshCache=false, $section_id='', $arFilter=''){
+		if($bRefreshCache){
+			$obCache=new CPHPCache;
+			$iReturnId=false;
+			$CACHE_ID='getSectionIdByCode';
+			$iCacheTime=10800; //3 часа
+			if($obCache->InitCache($iCacheTime, $section_code, $CACHE_ID)){
+				$vars=$obCache->GetVars();
+				$iReturnId=$vars['result'];
+			}
+			elseif($obCache->StartDataCache($iCacheTime, $section_code, $CACHE_ID)){
+				$iReturnId=CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
+				$obCache->EndDataCache(['result'=>$iReturnId]);
+			}
+			return $iReturnId;
+		}
+		else{
+			return CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
+		}
+	}
+
 	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false){
 		$result=[];
 		$sections=\Bitrix\Iblock\SectionTable::getList([

@@ -259,7 +259,33 @@ class CatalogHelper{
 			return CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
 		}
 	}
-
+	//Возвращает id элемента символьному коду NEW.
+	//Параметры:
+	//$element_id - если передать id элемента, то он и вернётся
+	//$element_code - символьный код элемента
+	//$section_id - id секции, в которой лежит элемент (необязательный)
+	//$section_code - символьный код секции, в которой лежит элемент (необязательный)
+	//$arFilter - массив свойств для фильтрации (необязательный). Для ускорения процесса поиска можно передать id инфоблока, в котором лежит элемент: array("IBLOCK_ID" => №).
+	public static function getElementIDByCode_($element_code, $bRefreshCache=false, $element_id='', $section_id='', $section_code='', $arFilter=''){
+		if($bRefreshCache){
+			$obCache=new CPHPCache;
+			$iReturnId=false;
+			$CACHE_ID='getSectionIdByCode';
+			$iCacheTime=10800; //3 часа
+			if($obCache->InitCache($iCacheTime, $element_code, $CACHE_ID)){
+				$vars=$obCache->GetVars();
+				$iReturnId=$vars['result'];
+			}
+			elseif($obCache->StartDataCache($iCacheTime, $element_code, $CACHE_ID)){
+				$iReturnId=CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
+				$obCache->EndDataCache(['result'=>$iReturnId]);
+			}
+			return $iReturnId;
+		}
+		else{
+			return CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
+		}
+	}
 	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false){
 		$result=[];
 		$sections=\Bitrix\Iblock\SectionTable::getList([

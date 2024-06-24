@@ -411,7 +411,7 @@ class CatalogHelper{
 				$element['PROPERTIES']=self::getPropertiesByID($infoblockId, $element['ID'], $properties, true);
 			}
 			if($price){
-				$element['PRICE']=self::getFinalPriceInCurrency($element['ID'])['FINAL_PRICE'];
+				$element['PRICE']=self::getFinalPriceInCurrency($element['ID']);
 			}
 			if($stock){
 				$element['STOCK']=self::getStockQuantity($element['ID']);

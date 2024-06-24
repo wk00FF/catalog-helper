@@ -286,7 +286,7 @@ class CatalogHelper{
 			return CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
 		}
 	}
-	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false){
+	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false, $stock=false){
 		$result=[];
 		$sections=\Bitrix\Iblock\SectionTable::getList([
 			'filter'=>[
@@ -304,7 +304,7 @@ class CatalogHelper{
 			$sectionId=$section['ID'];
 			$parentId=$section['IBLOCK_SECTION_ID'];
 			$sectionName=$section['NAME'];
-			$childSections=self::getInfoblockStructure($infoblockId, $sectionId, $fields, $properties, $price);
+			$childSections=self::getInfoblockStructure($infoblockId, $sectionId, $fields, $properties, $price, $stock);
 			$result['SECTIONS'][$sectionId]=$childSections;
 			$result['SECTIONS'][$sectionId]['ID']=$sectionId;
 			$result['SECTIONS'][$sectionId]['NAME']=$sectionName;
@@ -326,7 +326,10 @@ class CatalogHelper{
 				$element['PROPERTIES']=self::getPropertiesByID($infoblockId, $element['ID'], $properties, true);
 			}
 			if($price){
-				$element['PRICE']=getFinalPriceInCurrency($element['ID'])['FINAL_PRICE'];
+				$element['PRICE']=self::getFinalPriceInCurrency($element['ID'])['FINAL_PRICE'];
+			}
+			if($stock){
+				$element['STOCK']=self::getStockQuantity($element['ID']);
 			}
 			$result['ELEMENTS'][$element['ID']]=$element;
 		}
@@ -388,7 +391,7 @@ class CatalogHelper{
 		}
 		return $arPropertyes;
 	}
-	function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
+	public static function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
 		CModule::IncludeModule("iblock");
 		CModule::IncludeModule("catalog");
 		CModule::IncludeModule("sale");

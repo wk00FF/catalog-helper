@@ -1,6 +1,6 @@
 {
 	"name": "wk00ff/catalog-helper",
-	"version": "1.007",
+	"version": "1.008",
 	"autoload": {
 		"classmap": [
 			"src/CatalogHelper.php"

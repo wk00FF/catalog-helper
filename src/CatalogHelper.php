@@ -74,6 +74,43 @@ class CatalogHelper{
 		}
 		return $ret;
 	}
+	public static function getParentSectionsByElementID($elementID){
+		$element=\Bitrix\Iblock\ElementTable::getRow([
+			'select'=>['IBLOCK_SECTION_ID'],
+			'filter'=>['=ID'=>$elementID],
+		]);
+		if($element!==null){
+			$parentSections=[];
+			$parentSectionIterator=\Bitrix\Iblock\SectionTable::getList([
+				'select' =>[
+					'SECTION_ID'       =>'SECTION_SECTION.ID',
+					'IBLOCK_SECTION_ID'=>'SECTION_SECTION.IBLOCK_SECTION_ID',
+					'NAME'             =>'SECTION_SECTION.NAME',
+					'CODE'             =>'SECTION_SECTION.CODE',
+					'ACTIVE'           =>'SECTION_SECTION.ACTIVE'
+				],
+				'filter' =>[
+					'=ID'=>$element['IBLOCK_SECTION_ID'],
+				],
+				'runtime'=>[
+					'SECTION_SECTION'=>[
+						'data_type'=>'\Bitrix\Iblock\SectionTable',
+						'reference'=>[
+							'=this.IBLOCK_ID'    =>'ref.IBLOCK_ID',
+							'>=this.LEFT_MARGIN' =>'ref.LEFT_MARGIN',
+							'<=this.RIGHT_MARGIN'=>'ref.RIGHT_MARGIN',
+						],
+						'join_type'=>'inner'
+					],
+				],
+			]);
+			while($parentSection=$parentSectionIterator->fetch()){
+				$parentSections[]=$parentSection;
+			}
+			return $parentSections;
+		}
+		else return false;
+	}
 	private function contentFileName($URL){																																			// todo тут надо как то с обработкой URL разобраться. Они для каждого сайта свои
 		if(preg_match('/\.html$/', $URL)){
 			if(preg_match('/category_(\d+)\.html$/', $URL, $matches)){																						// это секция
@@ -216,7 +253,7 @@ class CatalogHelper{
 	 */
 	public static function getIBlockIDByCode_($sIBlockCode, $bRefreshCache=false){
 		if($bRefreshCache){
-			$obCache=new CPHPCache;
+			$obCache=new \CPHPCache;
 			$iReturnId=false;
 			$CACHE_ID='getIBlockIDByCode';
 			$iCacheTime=10800; //3 часа
@@ -241,7 +278,7 @@ class CatalogHelper{
 	//$arFilter - массив свойств для фильтрации (необязательный). Но для ускорения процесса поиска можно передать id инфоблока, в котором лежит элемент: array("IBLOCK_ID" => №).
 	public static function getSectionIDByCode_($section_code, $bRefreshCache=false, $section_id='', $arFilter=''){
 		if($bRefreshCache){
-			$obCache=new CPHPCache;
+			$obCache=new \CPHPCache;
 			$iReturnId=false;
 			$CACHE_ID='getSectionIdByCode';
 			$iCacheTime=10800; //3 часа
@@ -250,15 +287,62 @@ class CatalogHelper{
 				$iReturnId=$vars['result'];
 			}
 			elseif($obCache->StartDataCache($iCacheTime, $section_code, $CACHE_ID)){
-				$iReturnId=CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
+				$iReturnId=\CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
 				$obCache->EndDataCache(['result'=>$iReturnId]);
 			}
 			return $iReturnId;
 		}
 		else{
-			return CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
+			return \CIBlockFindTools::GetSectionID($section_id, $section_code, $arFilter);
 		}
 	}
+	public static function getSectionIDByName($iblockID, $sSectionName, $sSectionParentID=false, $bRefreshCache=false){
+		$obCache=new \CPHPCache;
+		$iReturnId=false;
+		$CACHE_ID='getSectionIdByCode'.$sSectionName;
+		$iCacheTime=10800; //3 часа
+		$iCacheTime=2;
+		if($obCache->StartDataCache($iCacheTime, $CACHE_ID) || $bRefreshCache){
+			$arFilter=['IBLOCK_ID'=>$iblockID, 'NAME'=>$sSectionName, 'SECTION_ID'=>$sSectionParentID];
+			$db_list=\CIBlockSection::GetList([], $arFilter, false, ["ID"]);
+			if($ar_result=$db_list->GetNext()) $iReturnId=$ar_result['ID'];
+			$obCache->EndDataCache($iReturnId);
+		}
+		else $iReturnId=$obCache->GetVars();
+		unset($obCache);
+		return $iReturnId;
+	}
+	function getAllElementsFromSectionID($sectionID, $select=['ID', 'NAME',], $bRefreshCache=false){
+		$returnEls=[];
+		if(!in_array('ID', $select)){
+			$select[]='ID';
+		}
+		\Bitrix\Main\Loader::includeModule('iblock');
+		$section=\Bitrix\Iblock\SectionTable::getList([
+			'filter'=>[
+				'=ID'=>(int)$sectionID,
+			],
+			'select'=>['LEFT_MARGIN', 'RIGHT_MARGIN'],
+		])->fetch();
+		$dbItems=\Bitrix\Iblock\ElementTable::getList([
+			'select'=>$select,
+			'filter'=>[
+				'=ACTIVE'                      =>'Y',
+				'>=IBLOCK_SECTION.LEFT_MARGIN' =>$section['LEFT_MARGIN'],
+				'<=IBLOCK_SECTION.RIGHT_MARGIN'=>$section['RIGHT_MARGIN'],
+			],
+		]);
+		while($arItem=$dbItems->fetch()){
+			foreach(self::getParentSectionsByElementID($arItem['ID']) as $sect){
+				if($sect['ACTIVE']=='N'){
+					continue 2;
+				}
+			}
+			$returnEls[$arItem['ID']]=$arItem;
+		}
+		return $returnEls;
+	}
+
 	//Возвращает id элемента символьному коду NEW.
 	//Параметры:
 	//$element_id - если передать id элемента, то он и вернётся
@@ -268,7 +352,7 @@ class CatalogHelper{
 	//$arFilter - массив свойств для фильтрации (необязательный). Для ускорения процесса поиска можно передать id инфоблока, в котором лежит элемент: array("IBLOCK_ID" => №).
 	public static function getElementIDByCode_($element_code, $bRefreshCache=false, $element_id='', $section_id='', $section_code='', $arFilter=''){
 		if($bRefreshCache){
-			$obCache=new CPHPCache;
+			$obCache=new \CPHPCache;
 			$iReturnId=false;
 			$CACHE_ID='getSectionIdByCode';
 			$iCacheTime=10800; //3 часа
@@ -277,13 +361,13 @@ class CatalogHelper{
 				$iReturnId=$vars['result'];
 			}
 			elseif($obCache->StartDataCache($iCacheTime, $element_code, $CACHE_ID)){
-				$iReturnId=CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
+				$iReturnId=\CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
 				$obCache->EndDataCache(['result'=>$iReturnId]);
 			}
 			return $iReturnId;
 		}
 		else{
-			return CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
+			return \CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
 		}
 	}
 	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false, $stock=false){
@@ -392,28 +476,28 @@ class CatalogHelper{
 		return $arPropertyes;
 	}
 	public static function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
-		CModule::IncludeModule("iblock");
-		CModule::IncludeModule("catalog");
-		CModule::IncludeModule("sale");
+//		CModule::IncludeModule("iblock");
+//		CModule::IncludeModule("catalog");
+//		CModule::IncludeModule("sale");
 		global $USER;
-		if(CCatalogSku::IsExistOffers($item_id)){																																	// Проверяем, имеет ли товар торговые предложения?
-			$res=CIBlockElement::GetByID($item_id);																																	// Пытаемся найти цену среди торговых предложений
+		if(\CCatalogSku::IsExistOffers($item_id)){																														// Проверяем, имеет ли товар торговые предложения?
+			$res=\CIBlockElement::GetByID($item_id);																															// Пытаемся найти цену среди торговых предложений
 			if($ar_res=$res->GetNext()){
 				$productName=$ar_res["NAME"];
 				if(isset($ar_res['IBLOCK_ID']) && $ar_res['IBLOCK_ID']){
-					$offers=CIBlockPriceTools::GetOffersArray([																														// Ищем все тогровые предложения
+					$offers=\CIBlockPriceTools::GetOffersArray([																											// Ищем все тогровые предложения
 						'IBLOCK_ID'         =>$ar_res['IBLOCK_ID'],
 						'HIDE_NOT_AVAILABLE'=>'Y',
 						'CHECK_PERMISSIONS' =>'Y',
 					], [$item_id], null, null, null, null, null, null, ['CURRENCY_ID'=>$sale_currency]);
 					foreach($offers as $offer){
-						$price=CCatalogProduct::GetOptimalPrice($offer['ID'], $cnt, $USER->GetUserGroupArray(), 'N');
+						$price=\CCatalogProduct::GetOptimalPrice($offer['ID'], $cnt, $USER->GetUserGroupArray(), 'N');
 						if(isset($price['PRICE'])){
 							$final_price=$price['PRICE']['PRICE'];
 							$currency_code=$price['PRICE']['CURRENCY'];
-							$arDiscounts=CCatalogDiscount::GetDiscountByProduct($item_id, $USER->GetUserGroupArray(), "N");															// Ищем скидки и высчитываем стоимость с учетом найденных
+							$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($item_id, $USER->GetUserGroupArray(), "N");							// Ищем скидки и высчитываем стоимость с учетом найденных
 							if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
-								$final_price=CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
+								$final_price=\CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
 							}
 							break;
 						}
@@ -421,7 +505,7 @@ class CatalogHelper{
 				}
 			}
 		}else{
-			$price=CCatalogProduct::GetOptimalPrice($item_id, $cnt, [1, 2, 3, 4, 5,], 'N');																							// Простой товар, без торговых предложений (для количества равному $cnt)
+			$price=\CCatalogProduct::GetOptimalPrice($item_id, $cnt, [1, 2, 3, 4, 5,], 'N');												// Простой товар, без торговых предложений (для количества равному $cnt)
 			if(!$price || !isset($price['PRICE'])){
 				return false;
 			}
@@ -432,12 +516,12 @@ class CatalogHelper{
 				$currency_code=$price['PRICE']['CURRENCY'];
 			}
 			$final_price=$price['PRICE']['PRICE'];																																	// Получаем итоговую цену
-			$arDiscounts=CCatalogDiscount::GetDiscountByProduct($item_id, [1, 2, 3, 4, 5,], "N", 2);																				// Ищем скидки и пересчитываем цену товара с их учетом
+			$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($item_id, [1, 2, 3, 4, 5,], "N", 2);																				// Ищем скидки и пересчитываем цену товара с их учетом
 			if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
-				$final_price=CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
+				$final_price=\CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
 			}
 			if($getName=="Y"){
-				$res=CIBlockElement::GetByID($item_id);
+				$res=\CIBlockElement::GetByID($item_id);
 				$ar_res=$res->GetNextElement();
 				$arFields=$ar_res->GetFields();
 				$arProps=$ar_res->GetProperties([], ['CODE'=>'CONF_HEADING']);
@@ -448,7 +532,7 @@ class CatalogHelper{
 			}
 		}
 		if($currency_code!=$sale_currency){																																			// Если необходимо, конвертируем в нужную валюту
-			$final_price=CCurrencyRates::ConvertCurrency($final_price, $currency_code, $sale_currency);
+			$final_price=\CCurrencyRates::ConvertCurrency($final_price, $currency_code, $sale_currency);
 		}
 		$arRes=[
 			'PRICE'      =>$price['PRICE']['PRICE'],
@@ -462,13 +546,13 @@ class CatalogHelper{
 	public static function getStockQuantity($productId){
 		$arStocks=[];
 		$arStocks['TOTAL']=0;
-		$productData=Bitrix\Catalog\ProductTable::getList([
+		$productData=\Bitrix\Catalog\ProductTable::getList([
 			'filter'=>['=ID'=>$productId],
 			'select'=>['ID', 'QUANTITY',],
 		])->fetch();
 
 		// Получаем остатки товара на складах
-		$storeProducts=Bitrix\Catalog\StoreProductTable::getList([
+		$storeProducts=\Bitrix\Catalog\StoreProductTable::getList([
 			'filter'=>['=PRODUCT_ID'=>$productId],
 			'select'=>['STORE_ID', 'AMOUNT',],
 		]);
@@ -477,7 +561,7 @@ class CatalogHelper{
 			$quantity=$storeProduct['AMOUNT'];
 
 			// Получаем название склада
-			$storeData=Bitrix\Catalog\StoreTable::getList([
+			$storeData=\Bitrix\Catalog\StoreTable::getList([
 				'filter'=>['=ID'=>$storeId],
 				'select'=>['ID', 'TITLE',],
 			])->fetch();

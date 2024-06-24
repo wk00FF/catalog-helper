@@ -477,9 +477,9 @@ class CatalogHelper{
 		return $arPropertyes;
 	}
 	public static function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
-//		CModule::IncludeModule("iblock");
-//		CModule::IncludeModule("catalog");
-//		CModule::IncludeModule("sale");
+		\Bitrix\Main\Loader::includeModule('iblock');
+		\Bitrix\Main\Loader::includeModule('catalog');
+		\Bitrix\Main\Loader::includeModule('sale');
 		global $USER;
 		if(\CCatalogSku::IsExistOffers($item_id)){																														// Проверяем, имеет ли товар торговые предложения?
 			$res=\CIBlockElement::GetByID($item_id);																															// Пытаемся найти цену среди торговых предложений

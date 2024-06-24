@@ -252,6 +252,7 @@ class CatalogHelper{
 	 * @return int
 	 */
 	public static function getIBlockIDByCode_($sIBlockCode, $bRefreshCache=false){
+		\Bitrix\Main\Loader::includeModule('iblock');
 		if($bRefreshCache){
 			$obCache=new \CPHPCache;
 			$iReturnId=false;

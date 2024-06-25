@@ -313,7 +313,17 @@ class CatalogHelper{
 		unset($obCache);
 		return $iReturnId;
 	}
-	function getAllElementsFromSectionID($sectionID, $select=['ID', 'NAME',], $bRefreshCache=false){
+
+	/**
+	 * Получить все элементы, начиная с секции ID
+	 * @param int $sectionID
+	 * @param array $select
+	 * @param bool $bRefreshCache
+	 * @return array
+	 * @throws \Bitrix\Main\ArgumentException
+	 * @throws \Bitrix\Main\LoaderException
+	 */
+	function getAllElementsFromSectionID(int $sectionID, array $select=['ID', 'NAME'], bool $bRefreshCache=false){
 		$returnEls=[];
 		if(!in_array('ID', $select)){
 			$select[]='ID';
@@ -371,7 +381,17 @@ class CatalogHelper{
 			return \CIBlockFindTools::GetElementID($element_id, $element_code, $section_id, $section_code, $arFilter);
 		}
 	}
-	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], $price=false, $stock=false){
+	/**
+	 * @param int $infoblockId
+	 * @param int $parentSectionId
+	 * @param array $fields
+	 * @param array $properties
+	 * @param bool $price если true, в результате содержит массив с лучшей ценой и скидкой
+	 * @param bool $stock если true, в результате содержит остатки товара
+	 * @return array
+	 * @throws \Bitrix\Main\ArgumentException
+	 */
+	public static function getInfoblockStructure(int $infoblockId, int $parentSectionId=0, array $fields=[], array $properties=[], bool $price=false, bool $stock=false){
 		$result=[];
 		$sections=\Bitrix\Iblock\SectionTable::getList([
 			'filter'=>[
@@ -420,7 +440,14 @@ class CatalogHelper{
 		}
 		return $result;
 	}
-
+	/**
+	 * Получить свойства элемента инфоблока
+	 * @param int   $iblockID
+	 * @param int   $elementID
+	 * @param array $selectCodes Необязательно, массив с символьными кодами свойств ['PROP1', 'PROP2', ...]
+	 * @param bool  $valueOnly усли установлено, то возвращает только значения свойств, иначе весь массив по каждому свойству
+	 * @return array
+	 */
 	public static function getPropertiesByID(int $iblockID, int $elementID, array $selectCodes=[], bool $valueOnly=false){
 		if(count($selectCodes)){
 			foreach($selectCodes as $selectCode){
@@ -476,13 +503,23 @@ class CatalogHelper{
 		}
 		return $arPropertyes;
 	}
-	public static function getFinalPriceInCurrency($item_id, $cnt=1, $getName="N", $sale_currency='RUB'){
+
+	/**
+	 * Получить лучшую цену товара
+	 * @param int $productID
+	 * @param int $cnt количество
+	 * @param string $getName Y/N выдергивать имя товара
+	 * @param string $sale_currency валюта 'RUB'
+	 * @return array|false
+	 * @throws \Bitrix\Main\LoaderException
+	 */
+	public static function getFinalPriceInCurrency(int $productID, int $cnt=1, string $getName="N", string $sale_currency='RUB'){
 		\Bitrix\Main\Loader::includeModule('iblock');
 		\Bitrix\Main\Loader::includeModule('catalog');
 		\Bitrix\Main\Loader::includeModule('sale');
 		global $USER;
-		if(\CCatalogSku::IsExistOffers($item_id)){																														// Проверяем, имеет ли товар торговые предложения?
-			$res=\CIBlockElement::GetByID($item_id);																															// Пытаемся найти цену среди торговых предложений
+		if(\CCatalogSku::IsExistOffers($productID)){																													// Проверяем, имеет ли товар торговые предложения?
+			$res=\CIBlockElement::GetByID($productID);																															// Пытаемся найти цену среди торговых предложений
 			if($ar_res=$res->GetNext()){
 				$productName=$ar_res["NAME"];
 				if(isset($ar_res['IBLOCK_ID']) && $ar_res['IBLOCK_ID']){
@@ -490,13 +527,13 @@ class CatalogHelper{
 						'IBLOCK_ID'         =>$ar_res['IBLOCK_ID'],
 						'HIDE_NOT_AVAILABLE'=>'Y',
 						'CHECK_PERMISSIONS' =>'Y',
-					], [$item_id], null, null, null, null, null, null, ['CURRENCY_ID'=>$sale_currency]);
+					], [$productID], null, null, null, null, null, null, ['CURRENCY_ID'=>$sale_currency]);
 					foreach($offers as $offer){
 						$price=\CCatalogProduct::GetOptimalPrice($offer['ID'], $cnt, $USER->GetUserGroupArray(), 'N');
 						if(isset($price['PRICE'])){
 							$final_price=$price['PRICE']['PRICE'];
 							$currency_code=$price['PRICE']['CURRENCY'];
-							$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($item_id, $USER->GetUserGroupArray(), "N");							// Ищем скидки и высчитываем стоимость с учетом найденных
+							$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($productID, $USER->GetUserGroupArray(), "N");						// Ищем скидки и высчитываем стоимость с учетом найденных
 							if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
 								$final_price=\CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
 							}
@@ -506,7 +543,7 @@ class CatalogHelper{
 				}
 			}
 		}else{
-			$price=\CCatalogProduct::GetOptimalPrice($item_id, $cnt, [1, 2, 3, 4, 5,], 'N');												// Простой товар, без торговых предложений (для количества равному $cnt)
+			$price=\CCatalogProduct::GetOptimalPrice($productID, $cnt, [1, 2, 3, 4, 5,], 'N');												// Простой товар, без торговых предложений (для количества равному $cnt)
 			if(!$price || !isset($price['PRICE'])){
 				return false;
 			}
@@ -517,12 +554,12 @@ class CatalogHelper{
 				$currency_code=$price['PRICE']['CURRENCY'];
 			}
 			$final_price=$price['PRICE']['PRICE'];																																	// Получаем итоговую цену
-			$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($item_id, [1, 2, 3, 4, 5,], "N", 2);																				// Ищем скидки и пересчитываем цену товара с их учетом
+			$arDiscounts=\CCatalogDiscount::GetDiscountByProduct($productID, [1, 2, 3, 4, 5,], "N", 2);																				// Ищем скидки и пересчитываем цену товара с их учетом
 			if(is_array($arDiscounts) && sizeof($arDiscounts)>0){
 				$final_price=\CCatalogProduct::CountPriceWithDiscount($final_price, $currency_code, $arDiscounts);
 			}
 			if($getName=="Y"){
-				$res=\CIBlockElement::GetByID($item_id);
+				$res=\CIBlockElement::GetByID($productID);
 				$ar_res=$res->GetNextElement();
 				$arFields=$ar_res->GetFields();
 				$arProps=$ar_res->GetProperties([], ['CODE'=>'CONF_HEADING']);
@@ -544,7 +581,14 @@ class CatalogHelper{
 		if($productName!="") $arRes['NAME']=$productName;
 		return $arRes;
 	}
-	public static function getStockQuantity($productId){
+
+	/**
+	 * Получить остатки товара на всех складах
+	 * @param int $productId
+	 * @return array
+	 * @throws \Bitrix\Main\ArgumentException
+	 */
+	public static function getStockQuantity(int $productId){
 		$arStocks=[];
 		$arStocks['TOTAL']=0;
 		$productData=\Bitrix\Catalog\ProductTable::getList([
